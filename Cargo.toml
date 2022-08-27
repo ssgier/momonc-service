@@ -1,0 +1,10 @@
+[package]
+name = "momonc"
+version = "0.1.0"
+edition = "2021"
+authors = ["Sandro Sgier"]
+description = """
+Metaheuristic Optimization Monitoring and Control
+"""
+
+[dependencies]
