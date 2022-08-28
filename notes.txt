@@ -1,2 +1,4 @@
 TODO:
 - explicit white background?
+- get impression of user experience by running soft-npu evolution (perhaps use cpp impl)
+- add notes on suitabile objective functions (expensive, single threaded)

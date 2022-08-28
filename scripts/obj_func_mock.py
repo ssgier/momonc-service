@@ -8,15 +8,9 @@ import random
 
 NUM_PTS = 10_000_000
 
-SPEC = '''
-{
-    "x": [0, 1],
-    "y": [0, 1]
-}
-'''
-
 def obj_func(x_val, y_val):
     '''Evaluates objective function'''
+    random.seed(0)
     acc = 0.0
     for _ in range(NUM_PTS):
         tmp_x = x_val - random.random()
@@ -25,12 +19,9 @@ def obj_func(x_val, y_val):
     return acc / NUM_PTS
 
 if __name__ == '__main__':
-    random.seed(0)
-    print(SPEC)
-    for line in sys.stdin:
-        data = json.loads(line)
-        obj_func_val = obj_func(data['x'], data['y'])
-        result = {
-            "obj_func_val": obj_func_val
-        }
-        print(json.dumps(result))
+    data = json.loads(sys.argv[1])
+    obj_func_val = obj_func(data['x'], data['y'])
+    result = {
+        "obj_func_val": obj_func_val
+    }
+    print(json.dumps(result))
