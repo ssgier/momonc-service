@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "momonc"
+name = "momonc-service"
 version = "0.1.0"
