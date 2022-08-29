@@ -1,3 +1,5 @@
+use log::debug;
+
 #[derive(Debug)]
 pub enum AppState {
     Idle(),
@@ -35,9 +37,27 @@ pub struct DimSpecWithBounds<T> {
     max_value_excl: T,
 }
 
+impl<T> DimSpecWithBounds<T> {
+    pub fn new(
+        name: String,
+        initial_value: T,
+        min_value_incl: T,
+        max_value_excl: T,
+    ) -> DimSpecWithBounds<T> {
+        DimSpecWithBounds {
+            dim_spec: DimSpec {
+                name,
+                initial_value,
+            },
+            min_value_incl,
+            max_value_excl,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Spec {
-    dims: Vec<Dim>,
+    pub dims: Vec<Dim>,
 }
 
 impl AppState {
@@ -45,11 +65,15 @@ impl AppState {
         AppState::Idle()
     }
 
+    fn transition_to(&mut self, new_state: AppState) {
+        debug!("Transition to {:?}", new_state);
+        *self = new_state;
+    }
     pub fn on_event(&mut self, event: AppEvent) -> Result<(), TransitionError> {
         match self {
             AppState::Idle() => match event {
                 AppEvent::NewSpec(_spec) => {
-                    *self = AppState::Processing();
+                    self.transition_to(AppState::Processing());
                     Ok(())
                 }
             },

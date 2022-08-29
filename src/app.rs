@@ -1,10 +1,15 @@
+use crate::{app_config, processing};
 use env_logger;
 use log::{info, LevelFilter};
 use serde_json::Value;
-use tokio::runtime;
 use std::env;
+use std::net::SocketAddr;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::runtime;
 
-const NUM_WORKER_THREADS: usize = 2;
+use crate::app_state::{AppState, Dim, DimSpecWithBounds, Spec};
 
 pub fn run() {
     env_logger::Builder::from_default_env()
@@ -23,12 +28,45 @@ pub fn run() {
         serde_json::to_string_pretty(&spec).unwrap()
     );
 
+    let spec = Spec {
+        dims: vec![
+            Dim::RealNumber(DimSpecWithBounds::new("x".to_string(), 0.1, 0.0, 1.0)),
+            Dim::RealNumber(DimSpecWithBounds::new("y".to_string(), 0.2, 0.0, 1.0)),
+        ],
+    }; // TODO remove, just a test
+
     let rt = runtime::Builder::new_multi_thread()
-        .worker_threads(NUM_WORKER_THREADS)
+        .worker_threads(app_config::NUM_WORKER_THREADS)
+        .enable_all()
         .build()
         .unwrap();
 
-    rt.block_on(async {
-        // TODO
-    });
+    rt.block_on(start_server(spec, run_cmd));
+}
+
+async fn start_server(default_spec: Spec, default_obj_func_cmd: String) {
+    let app_state = Arc::new(Mutex::new(AppState::new()));
+
+    // TODO: remove, just a test
+    tokio::spawn(processing::process(
+        default_spec,
+        default_obj_func_cmd,
+        app_state.clone(),
+    ));
+
+    let try_socket = TcpListener::bind(&app_config::ADDR).await;
+    let listener = try_socket.expect("Failed to bind");
+    info!("Listening on {}", app_config::ADDR);
+
+    while let Ok((stream, addr)) = listener.accept().await {
+        tokio::spawn(handle_connection(app_state.clone(), stream, addr));
+    }
+}
+
+async fn handle_connection(
+    _app_state: Arc<Mutex<AppState>>,
+    _tpc_stream: TcpStream,
+    _addr: SocketAddr,
+) {
+    panic!("Not implemented");
 }
