@@ -4,3 +4,5 @@ TODO:
 - add notes on suitabile objective functions (expensive, single threaded)
 - diagnostics widget to display stderr out and failed run info with cmd to reproduce/debug
 - serialize/deserialize state for saving progress
+- accept only localhost
+- thoroughly validate all inputs (like stdev >= 0, or inf/nan in jsons)

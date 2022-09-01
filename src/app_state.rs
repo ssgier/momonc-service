@@ -1,64 +1,29 @@
+use crate::algo::AlgoConf;
+use crate::param::ParamsSpec;
+use crate::processing;
 use log::debug;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tokio::task::JoinHandle;
+use AppEvent::*;
+use AppState::*;
 
 #[derive(Debug)]
 pub enum AppState {
     Idle(),
-    Processing(),
+    Processing(Option<JoinHandle<()>>),
     Terminal(),
+    Error(),
 }
 
 #[derive(Debug)]
 pub enum AppEvent {
-    NewSpec(Spec),
+    ProcessingJob(ParamsSpec, AlgoConf, String),
+    RequestStop(),
 }
 
 #[derive(Debug)]
 pub struct TransitionError(String);
-
-struct ProcessingContext {}
-
-#[derive(Debug)]
-pub enum Dim {
-    Boolean(DimSpec<bool>),
-    RealNumber(DimSpecWithBounds<f64>),
-    Integer(DimSpecWithBounds<i64>),
-}
-
-#[derive(Debug)]
-pub struct DimSpec<T> {
-    name: String,
-    initial_value: T,
-}
-
-#[derive(Debug)]
-pub struct DimSpecWithBounds<T> {
-    dim_spec: DimSpec<T>,
-    min_value_incl: T,
-    max_value_excl: T,
-}
-
-impl<T> DimSpecWithBounds<T> {
-    pub fn new(
-        name: String,
-        initial_value: T,
-        min_value_incl: T,
-        max_value_excl: T,
-    ) -> DimSpecWithBounds<T> {
-        DimSpecWithBounds {
-            dim_spec: DimSpec {
-                name,
-                initial_value,
-            },
-            min_value_incl,
-            max_value_excl,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Spec {
-    pub dims: Vec<Dim>,
-}
 
 impl AppState {
     pub fn new() -> AppState {
@@ -69,19 +34,43 @@ impl AppState {
         debug!("Transition to {:?}", new_state);
         *self = new_state;
     }
-    pub fn on_event(&mut self, event: AppEvent) -> Result<(), TransitionError> {
-        match self {
-            AppState::Idle() => match event {
-                AppEvent::NewSpec(_spec) => {
-                    self.transition_to(AppState::Processing());
+
+    pub async fn on_event(
+        app_state: Arc<Mutex<Self>>,
+        event: AppEvent,
+    ) -> Result<(), TransitionError> {
+        let mut state = app_state.lock().unwrap();
+        match &mut *state {
+            Idle() => match event {
+                ProcessingJob(spec, algo_conf, obj_func_cmd) => {
+                    let join_handle = tokio::spawn(processing::process(
+                        spec,
+                        algo_conf,
+                        obj_func_cmd,
+                        app_state.clone(),
+                    ));
+
+                    state.transition_to(Processing(Some(join_handle)));
                     Ok(())
                 }
+                _ => state.illegal_transition_error(event),
             },
-            AppState::Processing() => match event {
-                AppEvent::NewSpec(_) => self.illegal_transition_error(event),
+            Processing(join_handle_option) => match event {
+                RequestStop() => {
+                    debug!("Stop requested");
+                    join_handle_option.take().unwrap().abort();
+
+                    // TODO: kill workers and think about awaiting result
+                    state.transition_to(Terminal());
+                    Ok(())
+                }
+                _ => state.illegal_transition_error(event),
             },
-            AppState::Terminal() => match event {
-                AppEvent::NewSpec(_) => self.illegal_transition_error(event),
+            Terminal() => match event {
+                _ => state.illegal_transition_error(event),
+            },
+            Error() => match event {
+                _ => state.illegal_transition_error(event),
             },
         }
     }
