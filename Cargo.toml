@@ -3,8 +3,9 @@ name = "momonc-service"
 version = "0.1.0"
 edition = "2021"
 authors = ["Sandro Sgier"]
+license = "MIT"
 description = """
-Metaheuristic Optimization Monitoring and Control
+Parallel Metaheuristic Optimization Monitoring and Control
 """
 
 [dependencies]

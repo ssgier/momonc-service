@@ -1,2 +1,2 @@
 # momonc
-Metaheuristic Optimization Monitoring and Control
+Software for Monitoring and Control of Parallel Metaheuristic Optimization
