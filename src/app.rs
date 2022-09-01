@@ -5,14 +5,17 @@ use crate::app_state::AppState;
 use crate::app_config;
 use env_logger;
 use log::{info, LevelFilter};
-use serde_json::Value;
+use serde_json;
 use std::env;
+use std::fs;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::runtime;
+use crate::obj_func::ObjFuncCallDef;
+use std::path::Path;
 
 use crate::param::{Dim, DimSpecWithBounds, ParamsSpec};
 
@@ -21,17 +24,18 @@ pub fn run() {
         .filter(None, LevelFilter::Debug)
         .init();
 
-    let run_cmd =
-        env::var("MOMONC_OBJ_FUNC").expect("Environment variable MOMONC_OBJ_FUNC not set");
+    let momonc_dir_str = env::var("MOMONC_DIR").expect("Environment variable MOMONC_DIR not set");
+    let momonc_dir = Path::new(&momonc_dir_str);
+    let spec_json_str = fs::read_to_string(momonc_dir.join("spec.json")).expect("Unable to read spec file");
+    let spec_json: serde_json::Value = serde_json::from_str(&spec_json_str).expect("Unable to deserialize json");
+    let obj_func_script = momonc_dir.join("obj_func_mock.py");
+    let obj_func_call_def = ObjFuncCallDef {
+        program: "python".to_string(),
+        args: vec![obj_func_script.to_str().unwrap().to_string()],
+    };
 
-    let spec_str = env::var("MOMONC_SPEC").expect("Environment variable MOMONC_SPEC not set");
-    let spec = serde_json::from_str::<Value>(&spec_str).expect("Failed to deserialize spec json");
-
-    info!(
-        "Application starting.\nObjective function command:\n\n{}\n\nSpec:\n\n{}",
-        run_cmd,
-        serde_json::to_string_pretty(&spec).unwrap()
-    );
+    info!("Objective function call definition: {:?}", obj_func_call_def);
+    info!("spec_json: {:?}", spec_json);
 
     let spec = ParamsSpec {
         dims: vec![
@@ -46,10 +50,10 @@ pub fn run() {
         .build()
         .unwrap();
 
-    rt.block_on(start_server(spec, run_cmd));
+    rt.block_on(start_server(spec, obj_func_call_def));
 }
 
-async fn start_server(default_spec: ParamsSpec, default_obj_func_cmd: String) {
+async fn start_server(default_spec: ParamsSpec, default_obj_func_cmd: ObjFuncCallDef) {
     let app_state = Arc::new(Mutex::new(AppState::new()));
 
     // TODO: remove, just a test

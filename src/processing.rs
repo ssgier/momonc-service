@@ -1,4 +1,4 @@
-use crate::obj_func;
+use crate::obj_func::{self, ObjFuncCallDef};
 use crate::param::Dim;
 use futures::future;
 use log::debug;
@@ -22,13 +22,18 @@ use crate::param::{ParamsSpec, ParamsValue};
 pub async fn process(
     spec: ParamsSpec,
     algo_conf: AlgoConf,
-    obj_func_cmd: String,
+    obj_func_call_def: ObjFuncCallDef,
     app_state: Arc<Mutex<AppState>>,
 ) {
     match algo_conf {
         ParallelHillClimbing(parallel_hill_climbing_conf) => {
-            parallel_hill_climbing(spec, parallel_hill_climbing_conf, obj_func_cmd, app_state)
-                .await;
+            parallel_hill_climbing(
+                spec,
+                parallel_hill_climbing_conf,
+                obj_func_call_def,
+                app_state,
+            )
+            .await;
         }
     }
 }
@@ -36,7 +41,7 @@ pub async fn process(
 async fn parallel_hill_climbing(
     spec: ParamsSpec,
     algo_conf: ParallelHillClimbingConf,
-    obj_func_cmd: String,
+    obj_func_call_def: ObjFuncCallDef,
     _app_state: Arc<Mutex<AppState>>,
 ) {
     let mut current_value = Object(spec.extract_initial_guess());
@@ -49,7 +54,7 @@ async fn parallel_hill_climbing(
         let candidates: Vec<Value> = (0..algo_conf.num_values_per_iter)
             .map(|candidate_number| {
                 if iter_num == 0 && candidate_number == 0 {
-                    current_value.clone() // initial guess
+                    current_value.clone()
                 } else {
                     Object(create_candidate(
                         &current_value.as_object().unwrap(),
@@ -63,7 +68,7 @@ async fn parallel_hill_climbing(
 
         let eval_candidate_futures = candidates
             .into_iter()
-            .map(|candidate| evaluate_candidate(&obj_func_cmd, candidate));
+            .map(|candidate| evaluate_candidate(&obj_func_call_def, candidate));
 
         let best_candidate = future::join_all(eval_candidate_futures)
             .await
@@ -83,8 +88,8 @@ async fn parallel_hill_climbing(
     }
 }
 
-async fn evaluate_candidate(obj_func_cmd: &str, candidate: Value) -> (f64, Value) {
-    let obj_func_val = obj_func::call(obj_func_cmd, &candidate).await;
+async fn evaluate_candidate(obj_func_call_def: &ObjFuncCallDef, candidate: Value) -> (f64, Value) {
+    let obj_func_val = obj_func::call(obj_func_call_def, &candidate).await;
     (obj_func_val, candidate)
 }
 

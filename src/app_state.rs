@@ -1,3 +1,4 @@
+use crate::obj_func::ObjFuncCallDef;
 use crate::algo::AlgoConf;
 use crate::param::ParamsSpec;
 use crate::processing;
@@ -18,7 +19,7 @@ pub enum AppState {
 
 #[derive(Debug)]
 pub enum AppEvent {
-    ProcessingJob(ParamsSpec, AlgoConf, String),
+    ProcessingJob(ParamsSpec, AlgoConf, ObjFuncCallDef),
     RequestStop(),
 }
 
@@ -42,11 +43,11 @@ impl AppState {
         let mut state = app_state.lock().unwrap();
         match &mut *state {
             Idle() => match event {
-                ProcessingJob(spec, algo_conf, obj_func_cmd) => {
+                ProcessingJob(spec, algo_conf, obj_func_call_def) => {
                     let join_handle = tokio::spawn(processing::process(
                         spec,
                         algo_conf,
-                        obj_func_cmd,
+                        obj_func_call_def,
                         app_state.clone(),
                     ));
 
