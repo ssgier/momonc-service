@@ -1,11 +1,12 @@
+use serde::{Serialize, Deserialize};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum AlgoConf {
     ParallelHillClimbing(ParallelHillClimbingConf)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ParallelHillClimbingConf {
     pub std_dev: f64,
-    pub num_values_per_iter: usize
+    pub degree_of_par: usize
 }

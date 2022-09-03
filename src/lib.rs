@@ -3,6 +3,7 @@ pub mod app;
 pub mod app_config;
 pub mod app_state;
 pub mod obj_func;
+pub mod msg_handling;
 pub mod param;
 pub mod processing;
 pub mod api;

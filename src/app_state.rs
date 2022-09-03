@@ -1,5 +1,5 @@
-use crate::obj_func::ObjFuncCallDef;
 use crate::algo::AlgoConf;
+use crate::obj_func::ObjFuncCallDef;
 use crate::param::ParamsSpec;
 use crate::processing;
 use log::debug;
@@ -11,16 +11,16 @@ use AppState::*;
 
 #[derive(Debug)]
 pub enum AppState {
-    Idle(),
+    Idle,
     Processing(Option<JoinHandle<()>>),
-    Terminal(),
-    Error(),
+    Terminal,
+    Error,
 }
 
 #[derive(Debug)]
 pub enum AppEvent {
     ProcessingJob(ParamsSpec, AlgoConf, ObjFuncCallDef),
-    RequestStop(),
+    RequestStop,
 }
 
 #[derive(Debug)]
@@ -28,7 +28,7 @@ pub struct TransitionError(String);
 
 impl AppState {
     pub fn new() -> AppState {
-        AppState::Idle()
+        AppState::Idle
     }
 
     fn transition_to(&mut self, new_state: AppState) {
@@ -41,38 +41,27 @@ impl AppState {
         event: AppEvent,
     ) -> Result<(), TransitionError> {
         let mut state = app_state.lock().unwrap();
-        match &mut *state {
-            Idle() => match event {
-                ProcessingJob(spec, algo_conf, obj_func_call_def) => {
-                    let join_handle = tokio::spawn(processing::process(
-                        spec,
-                        algo_conf,
-                        obj_func_call_def,
-                        app_state.clone(),
-                    ));
+        match (&mut *state, event) {
+            (Idle | Terminal, ProcessingJob(spec, algo_conf, obj_func_call_def)) => {
+                let join_handle = tokio::spawn(processing::process(
+                    spec,
+                    algo_conf,
+                    obj_func_call_def,
+                    app_state.clone(),
+                ));
 
-                    state.transition_to(Processing(Some(join_handle)));
-                    Ok(())
-                }
-                _ => state.illegal_transition_error(event),
-            },
-            Processing(join_handle_option) => match event {
-                RequestStop() => {
-                    debug!("Stop requested");
-                    join_handle_option.take().unwrap().abort();
+                state.transition_to(Processing(Some(join_handle)));
+                Ok(())
+            }
+            (Processing(join_handle_option), RequestStop) => {
+                debug!("Stop requested");
+                join_handle_option.take().unwrap().abort();
 
-                    // TODO: kill workers and think about awaiting result
-                    state.transition_to(Terminal());
-                    Ok(())
-                }
-                _ => state.illegal_transition_error(event),
-            },
-            Terminal() => match event {
-                _ => state.illegal_transition_error(event),
-            },
-            Error() => match event {
-                _ => state.illegal_transition_error(event),
-            },
+                // TODO: kill workers and think about awaiting result
+                state.transition_to(Terminal);
+                Ok(())
+            }
+            (_, event) => state.illegal_transition_error(event),
         }
     }
 

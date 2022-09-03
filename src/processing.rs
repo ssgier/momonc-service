@@ -51,7 +51,7 @@ async fn parallel_hill_climbing(
     let mut rng = StdRng::seed_from_u64(0);
 
     for iter_num in 0.. {
-        let candidates: Vec<Value> = (0..algo_conf.num_values_per_iter)
+        let candidates: Vec<Value> = (0..algo_conf.degree_of_par)
             .map(|candidate_number| {
                 if iter_num == 0 && candidate_number == 0 {
                     current_value.clone()
