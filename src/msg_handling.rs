@@ -1,33 +1,29 @@
-use crate::api::Message::{self, *};
-use crate::api::ProcessingJobData;
 use crate::app_state::AppEvent;
-use crate::app_state::AppState;
+use crate::domain::ProcessingJobData;
+use crate::domain::RequestMessage::{self, *};
 use crate::obj_func::ObjFuncCallDef;
 use crate::param::ParamsSpec;
+use crate::type_aliases::EventSender;
 use log::info;
 use std::fs;
-use std::sync::Arc;
-use std::sync::Mutex;
 
+#[derive(Debug)]
 pub struct MsgHandler {
-    app_state: Arc<Mutex<AppState>>,
+    event_sender: EventSender,
 }
 
 impl MsgHandler {
-    pub fn new(app_state: Arc<Mutex<AppState>>) -> MsgHandler {
-        MsgHandler { app_state }
+    pub fn new(event_sender: EventSender) -> MsgHandler {
+        MsgHandler { event_sender }
     }
 
-    pub fn handle(&self, msg: Message) {
+    pub fn handle(&self, msg: RequestMessage) {
         match msg {
             ProcessingJobDataMsg(processing_job_data) => {
                 self.handle_processing_job(processing_job_data)
             }
             StopProcessingMsg => {
-                tokio::spawn(AppState::on_event(
-                    self.app_state.clone(),
-                    AppEvent::RequestStop,
-                ));
+                self.event_sender.send(AppEvent::RequestStop).unwrap();
             }
         }
     }
@@ -50,9 +46,12 @@ impl MsgHandler {
             obj_func_call_def
         );
 
-        tokio::spawn(AppState::on_event(
-            self.app_state.clone(),
-            AppEvent::ProcessingJob(spec, processing_job_data.algo_conf, obj_func_call_def),
-        ));
+        self.event_sender
+            .send(AppEvent::ProcessingJob(
+                spec,
+                processing_job_data.algo_conf,
+                obj_func_call_def,
+            ))
+            .unwrap();
     }
 }

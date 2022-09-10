@@ -1,5 +1,6 @@
 use crate::obj_func::{self, ObjFuncCallDef};
 use crate::param::Dim;
+use crate::type_aliases::EventSender;
 use futures::future;
 use log::debug;
 use rand::SeedableRng;
@@ -10,20 +11,18 @@ use rand::{
 use rand_distr::Normal;
 use serde_json::Number as NumberValue;
 use serde_json::Value::{self, Bool, Number, Object};
-use std::sync::{Arc, Mutex};
 
 use crate::algo::{
     AlgoConf::{self, *},
     ParallelHillClimbingConf,
 };
-use crate::app_state::AppState;
 use crate::param::{ParamsSpec, ParamsValue};
 
 pub async fn process(
     spec: ParamsSpec,
     algo_conf: AlgoConf,
     obj_func_call_def: ObjFuncCallDef,
-    app_state: Arc<Mutex<AppState>>,
+    event_sender: EventSender,
 ) {
     match algo_conf {
         ParallelHillClimbing(parallel_hill_climbing_conf) => {
@@ -31,7 +30,7 @@ pub async fn process(
                 spec,
                 parallel_hill_climbing_conf,
                 obj_func_call_def,
-                app_state,
+                event_sender,
             )
             .await;
         }
@@ -42,7 +41,7 @@ async fn parallel_hill_climbing(
     spec: ParamsSpec,
     algo_conf: ParallelHillClimbingConf,
     obj_func_call_def: ObjFuncCallDef,
-    _app_state: Arc<Mutex<AppState>>,
+    _event_sender: EventSender,
 ) {
     let mut current_value = Object(spec.extract_initial_guess());
     let mut current_obj_func_val = f64::MAX;
@@ -100,7 +99,7 @@ fn create_candidate(
     rng: &mut StdRng,
 ) -> ParamsValue {
     let mut result = ParamsValue::default();
-    let std_dev = conf.std_dev;
+    let std_dev = conf.relative_std_dev;
     for dim_spec in &params_spec.dims {
         match dim_spec {
             Dim::Boolean(bool_spec) => {
