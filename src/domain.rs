@@ -3,16 +3,16 @@ use crate::algo::*;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum RequestMessage {
-    ProcessingJobDataMsg(ProcessingJobData),
-    StopProcessingMsg
+    StartProcessing(ProcessingJobData),
+    StopProcessing
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum StatusMessage {
     DomainState(DomainState),
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum DomainState {
     Idle(DefaultProcessingJobData),
     Processing,

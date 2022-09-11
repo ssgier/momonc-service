@@ -1,6 +1,8 @@
 use std::net::SocketAddr;
 
 use env_logger;
+use futures::select;
+use futures::FutureExt;
 use futures::SinkExt;
 use futures::StreamExt;
 use futures::TryStreamExt;
@@ -13,11 +15,11 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::UnboundedReceiverStream;
 use tokio_tungstenite::tungstenite::Message;
 
-use crate::domain::StatusMessage;
 use crate::app_config;
 use crate::app_state::run_app_fsm;
 use crate::app_state::AppEvent;
 use crate::disk_cache;
+use crate::domain::StatusMessage;
 use crate::msg_handling::MsgHandler;
 use crate::type_aliases::EventSender;
 
@@ -49,7 +51,8 @@ async fn start_server(event_sender: EventSender) {
     let listener = try_socket.expect("Failed to bind");
     info!("Listening on {}", app_config::ADDR);
     while let Ok((stream, addr)) = listener.accept().await {
-        tokio::spawn(handle_connection(stream, addr, event_sender.clone()));
+        handle_connection(stream, addr, event_sender.clone()).await; // support at most one
+                                                                     // connection at a time
     }
 }
 
@@ -60,18 +63,17 @@ async fn handle_connection(tpc_stream: TcpStream, addr: SocketAddr, event_sender
 
         let in_msg_handler = MsgHandler::new(event_sender.clone());
 
-        let (subscription, subscriber) = mpsc::unbounded_channel::<StatusMessage>();
+        let (status_msg_sender, status_msg_receiver) = mpsc::unbounded_channel::<StatusMessage>();
         event_sender
-            .send(AppEvent::NewSubscriber(subscription.clone()))
+            .send(AppEvent::NewSubscriber(status_msg_sender.clone()))
             .unwrap();
 
-        let mut out_msgs = UnboundedReceiverStream::new(subscriber)
+        let mut out_msgs = UnboundedReceiverStream::new(status_msg_receiver)
             .map(|status_msg| Ok(Message::Text(serde_json::to_string(&status_msg).unwrap())));
 
         let out_fut = outgoing.send_all(&mut out_msgs);
 
         let in_fut = incoming.try_for_each(|tungstenite_msg| {
-            info!("Received msg: {}", tungstenite_msg);
             if let Message::Text(msg_str) = tungstenite_msg {
                 match serde_json::from_str(&msg_str) {
                     Ok(msg) => {
@@ -86,12 +88,10 @@ async fn handle_connection(tpc_stream: TcpStream, addr: SocketAddr, event_sender
             future::ok(())
         });
 
-        match future::join(out_fut, in_fut).await {
-            (o, i) => {
-                o.unwrap();
-                i.unwrap();
-            }
-        }
+        select! {
+            _ = in_fut.fuse() => (),
+            _ = out_fut.fuse() => panic!()
+        };
         info!("{} disconnected", &addr);
     } else {
         info!("Websocket handshake failed");

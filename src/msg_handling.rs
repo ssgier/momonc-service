@@ -19,10 +19,10 @@ impl MsgHandler {
 
     pub fn handle(&self, msg: RequestMessage) {
         match msg {
-            ProcessingJobDataMsg(processing_job_data) => {
+            StartProcessing(processing_job_data) => {
                 self.handle_processing_job(processing_job_data)
             }
-            StopProcessingMsg => {
+            StopProcessing => {
                 self.event_sender.send(AppEvent::RequestStop).unwrap();
             }
         }

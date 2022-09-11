@@ -38,8 +38,8 @@ pub async fn run_app_fsm(
     sender: EventSender,
     default_processing_job_data: DefaultProcessingJobData,
 ) {
-    let mut state = DomainStateInner::Idle(default_processing_job_data);
-    let mut subscribers = Vec::new();
+    let mut state = DomainStateInner::Idle(default_processing_job_data.clone());
+    let mut subscriber: Option<Subscriber> = None;
     while let Some(event) = recv.recv().await {
         state = match (state, event) {
             (Idle(_) | Terminal, ProcessingJob(spec, algo_conf, obj_func_call_def)) => {
@@ -50,23 +50,24 @@ pub async fn run_app_fsm(
                     sender.clone(),
                 ));
 
-                Processing(Some(join_handle))
+                let new_state = Processing(Some(join_handle));
+                handle_subscription(&new_state, &mut subscriber);
+                new_state
             }
-            (state, AppEvent::NewSubscriber(subscriber)) => {
-                if subscriber
-                    .send(StatusMessage::DomainState(get_full_state(&state)))
-                    .is_ok()
-                {
-                    subscribers.push(subscriber);
-                }
+            (state, AppEvent::NewSubscriber(new_subscriber)) => {
+                subscriber = Some(new_subscriber);
+                handle_subscription(&state, &mut subscriber);
                 state
             }
             (Processing(mut join_handle_option), RequestStop) => {
                 debug!("Stop requested");
                 join_handle_option.take().unwrap().abort();
-
                 // TODO: kill workers and think about awaiting result
-                Terminal
+
+                // TODO: transition to terminal
+                let new_state = DomainStateInner::Idle(default_processing_job_data.clone());
+                handle_subscription(&new_state, &mut subscriber);
+                new_state
             }
             (state, event) => {
                 debug!("Illegal event {:?} in state {:?}", event, state);
@@ -76,11 +77,24 @@ pub async fn run_app_fsm(
     }
 }
 
-fn get_full_state(domain_state: &DomainStateInner) -> DomainState {
-    match domain_state {
-        Idle(default_processing_job_data) => DomainState::Idle(default_processing_job_data.clone()),
-        Processing(_) => DomainState::Processing,
-        Terminal => DomainState::Terminal,
-        Error => DomainState::Error,
+fn handle_subscription(domain_state: &DomainStateInner, subscriber: &mut Option<Subscriber>) {
+    match subscriber {
+        Some(subscriber_) => {
+            let full_state = match domain_state {
+                Idle(default_processing_job_data) => {
+                    DomainState::Idle(default_processing_job_data.clone())
+                }
+                Processing(_) => DomainState::Processing,
+                Terminal => DomainState::Terminal,
+                Error => DomainState::Error,
+            };
+            if subscriber_
+                .send(StatusMessage::DomainState(full_state))
+                .is_err()
+            {
+                *subscriber = None;
+            }
+        }
+        _ => (),
     }
 }
