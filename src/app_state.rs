@@ -8,7 +8,7 @@ use crate::param::ParamsSpec;
 use crate::processing;
 use crate::type_aliases::EventReceiver;
 use crate::type_aliases::EventSender;
-use crate::type_aliases::Subscriber;
+use crate::type_aliases::StatusSender;
 use log::debug;
 use tokio::task::JoinHandle;
 use AppEvent::*;
@@ -24,10 +24,11 @@ pub enum DomainStateInner {
 
 #[derive(Debug)]
 pub enum AppEvent {
-    NewSubscriber(Subscriber),
+    NewSubscriber(StatusSender),
     ProcessingJob(ParamsSpec, AlgoConf, ObjFuncCallDef),
     Request(RequestMessage),
     RequestStop,
+    DelegateStatusMessage(StatusMessage),
 }
 
 #[derive(Debug)]
@@ -39,7 +40,7 @@ pub async fn run_app_fsm(
     default_processing_job_data: DefaultProcessingJobData,
 ) {
     let mut state = DomainStateInner::Idle(default_processing_job_data.clone());
-    let mut subscriber: Option<Subscriber> = None;
+    let mut subscriber: Option<StatusSender> = None;
     while let Some(event) = recv.recv().await {
         state = match (state, event) {
             (Idle(_) | Terminal, ProcessingJob(spec, algo_conf, obj_func_call_def)) => {
@@ -57,6 +58,12 @@ pub async fn run_app_fsm(
             (state, AppEvent::NewSubscriber(new_subscriber)) => {
                 subscriber = Some(new_subscriber);
                 handle_subscription(&state, &mut subscriber);
+                state
+            }
+            (state, AppEvent::DelegateStatusMessage(status_msg)) => {
+                if let Some(subscriber_) = &mut subscriber {
+                    subscriber_.send(status_msg).ok();
+                }
                 state
             }
             (Processing(mut join_handle_option), RequestStop) => {
@@ -77,7 +84,7 @@ pub async fn run_app_fsm(
     }
 }
 
-fn handle_subscription(domain_state: &DomainStateInner, subscriber: &mut Option<Subscriber>) {
+fn handle_subscription(domain_state: &DomainStateInner, subscriber: &mut Option<StatusSender>) {
     match subscriber {
         Some(subscriber_) => {
             let full_state = match domain_state {

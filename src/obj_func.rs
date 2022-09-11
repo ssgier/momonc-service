@@ -12,10 +12,10 @@ struct ObjFuncChildResult {
 #[derive(Debug)]
 pub struct ObjFuncCallDef {
     pub program: String,
-    pub args: Vec<String>
+    pub args: Vec<String>,
 }
 
-pub async fn call<T: Serialize>(call_def: &ObjFuncCallDef, params: &T) -> f64 {
+pub async fn call<T: Serialize>(call_def: &ObjFuncCallDef, params: &T) -> Option<f64> {
     let child = Command::new(&call_def.program)
         .args(&call_def.args)
         .arg(serde_json::to_string(&params).unwrap())
@@ -26,9 +26,9 @@ pub async fn call<T: Serialize>(call_def: &ObjFuncCallDef, params: &T) -> f64 {
     let output = child.wait_with_output().await.unwrap();
     if !output.stderr.is_empty() {
         // TODO: error handling
-        f64::MAX
+        None
     } else {
         let result: ObjFuncChildResult = serde_json::from_slice(&output.stdout).unwrap();
-        result.obj_func_val
+        Some(result.obj_func_val)
     }
 }

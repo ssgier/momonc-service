@@ -1,3 +1,5 @@
+use crate::app_state::AppEvent;
+use crate::domain::{CandidateEvalReport, StatusMessage};
 use crate::obj_func::{self, ObjFuncCallDef};
 use crate::param::Dim;
 use crate::type_aliases::EventSender;
@@ -17,6 +19,7 @@ use crate::algo::{
     ParallelHillClimbingConf,
 };
 use crate::param::{ParamsSpec, ParamsValue};
+use std::time::Instant;
 
 pub async fn process(
     spec: ParamsSpec,
@@ -41,13 +44,14 @@ async fn parallel_hill_climbing(
     spec: ParamsSpec,
     algo_conf: ParallelHillClimbingConf,
     obj_func_call_def: ObjFuncCallDef,
-    _event_sender: EventSender,
+    event_sender: EventSender,
 ) {
     let mut current_value = Object(spec.extract_initial_guess());
     let mut current_obj_func_val = f64::MAX;
 
     debug!("Starting with initial guess: {:?}", &current_value);
     let mut rng = StdRng::seed_from_u64(0);
+    let processing_start_instant = Instant::now();
 
     for iter_num in 0.. {
         let candidates: Vec<Value> = (0..algo_conf.degree_of_par)
@@ -65,13 +69,20 @@ async fn parallel_hill_climbing(
             })
             .collect();
 
-        let eval_candidate_futures = candidates
-            .into_iter()
-            .map(|candidate| evaluate_candidate(&obj_func_call_def, candidate));
+        let eval_candidate_futures = candidates.into_iter().map(|candidate| {
+            evaluate_candidate_and_report(
+                &obj_func_call_def,
+                candidate,
+                &processing_start_instant,
+                event_sender.clone(),
+            )
+        });
 
         let best_candidate = future::join_all(eval_candidate_futures)
             .await
             .into_iter()
+            .filter(|eval| eval.0.is_some())
+            .map(|eval| (eval.0.unwrap(), eval.1))
             .min_by(|x, y| x.0.partial_cmp(&y.0).unwrap())
             .unwrap();
 
@@ -87,8 +98,29 @@ async fn parallel_hill_climbing(
     }
 }
 
-async fn evaluate_candidate(obj_func_call_def: &ObjFuncCallDef, candidate: Value) -> (f64, Value) {
+async fn evaluate_candidate_and_report(
+    obj_func_call_def: &ObjFuncCallDef,
+    candidate: Value,
+    processing_start_instant: &Instant,
+    event_sender: EventSender,
+) -> (Option<f64>, Value) {
+    let start_time = processing_start_instant.elapsed().as_secs_f64();
     let obj_func_val = obj_func::call(obj_func_call_def, &candidate).await;
+    let completion_time = processing_start_instant.elapsed().as_secs_f64();
+
+    let report = CandidateEvalReport {
+        start_time,
+        completion_time,
+        obj_func_val,
+        candidate: candidate.clone(),
+    };
+
+    event_sender
+        .send(AppEvent::DelegateStatusMessage(
+            StatusMessage::CandidateEvalReport(report),
+        ))
+        .ok();
+
     (obj_func_val, candidate)
 }
 
