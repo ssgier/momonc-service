@@ -69,11 +69,14 @@ async fn parallel_hill_climbing(
             })
             .collect();
 
+        let iteration_start_time = processing_start_instant.elapsed().as_secs_f64();
+
         let eval_candidate_futures = candidates.into_iter().map(|candidate| {
             evaluate_candidate_and_report(
                 &obj_func_call_def,
                 candidate,
                 &processing_start_instant,
+                iteration_start_time,
                 event_sender.clone(),
             )
         });
@@ -102,14 +105,14 @@ async fn evaluate_candidate_and_report(
     obj_func_call_def: &ObjFuncCallDef,
     candidate: Value,
     processing_start_instant: &Instant,
+    iteration_start_time: f64,
     event_sender: EventSender,
 ) -> (Option<f64>, Value) {
-    let start_time = processing_start_instant.elapsed().as_secs_f64();
     let obj_func_val = obj_func::call(obj_func_call_def, &candidate).await;
     let completion_time = processing_start_instant.elapsed().as_secs_f64();
 
     let report = CandidateEvalReport {
-        start_time,
+        start_time: iteration_start_time,
         completion_time,
         obj_func_val,
         candidate: candidate.clone(),
