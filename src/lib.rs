@@ -7,5 +7,6 @@ pub mod obj_func;
 pub mod msg_handling;
 pub mod param;
 pub mod processing;
+pub mod processing_watcher;
 pub mod domain;
 pub mod type_aliases;

@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::algo::AlgoConf;
 use crate::domain::DefaultProcessingJobData;
 use crate::domain::DomainState;
@@ -6,6 +8,7 @@ use crate::domain::StatusMessage;
 use crate::obj_func::ObjFuncCallDef;
 use crate::param::ParamsSpec;
 use crate::processing;
+use crate::processing_watcher::ProcessingWatcher;
 use crate::type_aliases::EventReceiver;
 use crate::type_aliases::EventSender;
 use crate::type_aliases::StatusSender;
@@ -17,7 +20,7 @@ use DomainStateInner::*;
 #[derive(Debug)]
 pub enum DomainStateInner {
     Idle(DefaultProcessingJobData),
-    Processing(Option<JoinHandle<()>>),
+    Processing(Option<JoinHandle<()>>, ProcessingWatcher),
     Terminal,
     Error,
 }
@@ -51,7 +54,8 @@ pub async fn run_app_fsm(
                     sender.clone(),
                 ));
 
-                let new_state = Processing(Some(join_handle));
+                let new_state =
+                    Processing(Some(join_handle), ProcessingWatcher::new(Instant::now()));
                 handle_subscription(&new_state, &mut subscriber);
                 new_state
             }
@@ -60,13 +64,21 @@ pub async fn run_app_fsm(
                 handle_subscription(&state, &mut subscriber);
                 state
             }
-            (state, AppEvent::DelegateStatusMessage(status_msg)) => {
+            (mut state, AppEvent::DelegateStatusMessage(status_msg)) => {
+                let current_time = Instant::now();
+
+                if let Processing(_, processing_watcher) = &mut state {
+                    processing_watcher.update(current_time);
+                    processing_watcher.on_delegate_status_msg(&status_msg);
+                }
+
                 if let Some(subscriber_) = &mut subscriber {
                     subscriber_.send(status_msg).ok();
                 }
+
                 state
             }
-            (Processing(mut join_handle_option), RequestStop) => {
+            (Processing(mut join_handle_option, _), RequestStop) => {
                 debug!("Stop requested");
                 join_handle_option.take().unwrap().abort();
                 // TODO: kill workers and think about awaiting result
@@ -91,7 +103,9 @@ fn handle_subscription(domain_state: &DomainStateInner, subscriber: &mut Option<
                 Idle(default_processing_job_data) => {
                     DomainState::Idle(default_processing_job_data.clone())
                 }
-                Processing(_) => DomainState::Processing,
+                Processing(_, processing_watcher) => {
+                    DomainState::Processing(processing_watcher.compute_processing_state())
+                }
                 Terminal => DomainState::Terminal,
                 Error => DomainState::Error,
             };

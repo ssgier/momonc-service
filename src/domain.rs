@@ -14,10 +14,10 @@ pub enum StatusMessage {
     CandidateEvalReport(CandidateEvalReport),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DomainState {
     Idle(DefaultProcessingJobData),
-    Processing,
+    Processing(ProcessingState),
     Terminal,
     Error,
 }
@@ -34,10 +34,16 @@ pub struct ProcessingJobData {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct ProcessingState {
+    pub recent_candidate_eval_reports: Vec<CandidateEvalReport>,
+    pub time: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CandidateEvalReport {
     pub start_time: f64,
     pub completion_time: f64,
     pub obj_func_val: Option<f64>,
-    pub candidate: serde_json::Value
+    pub best_seen_obj_func_val_before: Option<f64>,
+    pub candidate: serde_json::Value,
 }
-
