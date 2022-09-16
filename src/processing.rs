@@ -15,15 +15,17 @@ use serde_json::Number as NumberValue;
 use serde_json::Value::{Bool, Number, Object};
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::time::Duration;
 
 use crate::algo::{
     AlgoConf::{self, *},
     ParallelHillClimbingConf,
 };
 use crate::param::{ParamsSpec, ParamsValue};
-use std::time::Instant;
+use crate::type_aliases::AppTime;
 
 pub async fn process(
+    processing_start_instant: AppTime,
     spec: ParamsSpec,
     algo_conf: AlgoConf,
     obj_func_call_def: ObjFuncCallDef,
@@ -32,6 +34,7 @@ pub async fn process(
     match algo_conf {
         ParallelHillClimbing(parallel_hill_climbing_conf) => {
             parallel_hill_climbing(
+                processing_start_instant,
                 spec,
                 parallel_hill_climbing_conf,
                 obj_func_call_def,
@@ -51,6 +54,7 @@ struct BestSeen {
 type BestSeenContext = Arc<Mutex<Option<BestSeen>>>;
 
 async fn parallel_hill_climbing(
+    processing_start_instant: AppTime,
     spec: ParamsSpec,
     algo_conf: ParallelHillClimbingConf,
     obj_func_call_def: ObjFuncCallDef,
@@ -61,7 +65,6 @@ async fn parallel_hill_climbing(
 
     debug!("Starting with initial guess: {:?}", &initial_guess);
     let mut rng = StdRng::seed_from_u64(0);
-    let processing_start_instant = Instant::now();
 
     for iter_num in 0.. {
         let candidates: Vec<serde_json::Value> = (0..algo_conf.degree_of_par)
@@ -87,7 +90,10 @@ async fn parallel_hill_climbing(
             })
             .collect();
 
-        let iteration_start_time = processing_start_instant.elapsed().as_secs_f64();
+        let iteration_start_time = processing_start_instant
+            .elapsed()
+            .unwrap_or(Duration::ZERO)
+            .as_secs_f64();
 
         let eval_candidate_futures = candidates.into_iter().map(|candidate| {
             evaluate_candidate_and_report(
@@ -113,12 +119,15 @@ async fn evaluate_candidate_and_report(
     obj_func_call_def: &ObjFuncCallDef,
     new_candidate: serde_json::Value,
     best_seen_context: BestSeenContext,
-    processing_start_instant: &Instant,
+    processing_start_instant: &AppTime,
     iteration_start_time: f64,
     event_sender: EventSender,
 ) {
     let new_obj_func_val_option = obj_func::call(obj_func_call_def, &new_candidate).await;
-    let completion_time = processing_start_instant.elapsed().as_secs_f64();
+    let completion_time = processing_start_instant
+        .elapsed()
+        .unwrap_or(Duration::ZERO)
+        .as_secs_f64();
 
     let mut best_seen_option = best_seen_context.lock().unwrap();
     let obj_func_val_before = best_seen_option

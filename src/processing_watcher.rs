@@ -1,17 +1,16 @@
-use crate::app_config::CANDIDATE_REPORT_REMEMBER_WINDOW_SECONDS;
-use std::{collections::VecDeque, time::Instant};
+use std::{collections::VecDeque, time::Duration};
 
-use crate::domain::{CandidateEvalReport, ProcessingState, StatusMessage};
+use crate::{domain::{CandidateEvalReport, ProcessingState, StatusMessage}, type_aliases::AppTime};
 
 #[derive(Debug)]
 pub struct ProcessingWatcher {
-    start_time: Instant,
-    last_time: f64,
+    pub start_time: AppTime,
+    pub last_time: f64,
     eval_report_queue: VecDeque<CandidateEvalReport>,
 }
 
 impl ProcessingWatcher {
-    pub fn new(time: Instant) -> ProcessingWatcher {
+    pub fn new(time: AppTime) -> ProcessingWatcher {
         ProcessingWatcher {
             start_time: time,
             last_time: 0.0,
@@ -19,17 +18,8 @@ impl ProcessingWatcher {
         }
     }
 
-    pub fn update(&mut self, time: Instant) {
-        self.last_time = time.duration_since(self.start_time).as_secs_f64();
-        let cut_off_time = self.last_time - CANDIDATE_REPORT_REMEMBER_WINDOW_SECONDS;
-        loop {
-            match self.eval_report_queue.front() {
-                Some(head) if head.completion_time < cut_off_time => {
-                    self.eval_report_queue.pop_front();
-                }
-                _ => break,
-            }
-        }
+    pub fn update(&mut self, time: AppTime) {
+        self.last_time = time.duration_since(self.start_time).unwrap_or(Duration::ZERO).as_secs_f64();
     }
 
     pub fn on_delegate_status_msg(&mut self, message: &StatusMessage) {

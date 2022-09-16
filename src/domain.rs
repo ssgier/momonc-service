@@ -12,6 +12,7 @@ pub enum RequestMessage {
 pub enum StatusMessage {
     DomainState(DomainState),
     CandidateEvalReport(CandidateEvalReport),
+    Time(f64),
 }
 
 #[derive(Serialize, Deserialize, Debug)]

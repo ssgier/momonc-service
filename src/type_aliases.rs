@@ -1,3 +1,4 @@
+use std::time::SystemTime;
 use futures::stream::SplitSink;
 use fxhash::FxHashMap;
 use tokio::{
@@ -14,3 +15,4 @@ pub type StatusSender = UnboundedSender<StatusMessage>;
 pub type StatusReceiver = UnboundedReceiver<StatusMessage>;
 pub type OutSink = SplitSink<WebSocketStream<TcpStream>, Message>;
 pub type AppHashMap<K, V> = FxHashMap<K, V>;
+pub type AppTime = SystemTime;
