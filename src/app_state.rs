@@ -107,14 +107,6 @@ pub async fn run_app_fsm(
                                     .as_secs_f64(),
                             ))
                             .ok();
-                        debug!(
-                            "{}",
-                            processing_watcher
-                                .start_time
-                                .elapsed()
-                                .unwrap_or(Duration::ZERO)
-                                .as_secs_f64()
-                        );
                     }
                     _ => (),
                 }

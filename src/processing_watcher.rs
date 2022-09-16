@@ -1,6 +1,10 @@
 use std::{collections::VecDeque, time::Duration};
 
-use crate::{domain::{CandidateEvalReport, ProcessingState, StatusMessage}, type_aliases::AppTime};
+use crate::{
+    app_config::CANDIDATE_WINDOW_SIZE_HINT,
+    domain::{CandidateEvalReport, ProcessingState, StatusMessage},
+    type_aliases::AppTime,
+};
 
 #[derive(Debug)]
 pub struct ProcessingWatcher {
@@ -19,7 +23,10 @@ impl ProcessingWatcher {
     }
 
     pub fn update(&mut self, time: AppTime) {
-        self.last_time = time.duration_since(self.start_time).unwrap_or(Duration::ZERO).as_secs_f64();
+        self.last_time = time
+            .duration_since(self.start_time)
+            .unwrap_or(Duration::ZERO)
+            .as_secs_f64();
     }
 
     pub fn on_delegate_status_msg(&mut self, message: &StatusMessage) {
@@ -39,6 +46,7 @@ impl ProcessingWatcher {
                 .map(|report| report.clone())
                 .collect(),
             time: self.last_time,
+            window_size_hint: CANDIDATE_WINDOW_SIZE_HINT,
         }
     }
 }

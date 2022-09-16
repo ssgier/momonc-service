@@ -38,6 +38,7 @@ pub struct ProcessingJobData {
 pub struct ProcessingState {
     pub recent_candidate_eval_reports: Vec<CandidateEvalReport>,
     pub time: f64,
+    pub window_size_hint: usize
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
