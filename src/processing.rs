@@ -46,12 +46,13 @@ pub async fn process(
 }
 
 #[derive(Debug)]
-struct BestSeen {
-    candidate: serde_json::Value,
-    obj_func_val: f64,
+struct Seen {
+    best_candidate: serde_json::Value,
+    best_obj_func_val: f64,
+    latest_completion_time: f64,
 }
 
-type BestSeenContext = Arc<Mutex<Option<BestSeen>>>;
+type SeenContext = Arc<Mutex<Option<Seen>>>;
 
 async fn parallel_hill_climbing(
     processing_start_instant: AppTime,
@@ -61,7 +62,7 @@ async fn parallel_hill_climbing(
     event_sender: EventSender,
 ) {
     let initial_guess = Object(spec.extract_initial_guess());
-    let best_seen: BestSeenContext = Arc::new(Mutex::new(None));
+    let seen: SeenContext = Arc::new(Mutex::new(None));
 
     debug!("Starting with initial guess: {:?}", &initial_guess);
     let mut rng = StdRng::seed_from_u64(0);
@@ -72,10 +73,10 @@ async fn parallel_hill_climbing(
                 if iter_num == 0 && candidate_number == 0 {
                     initial_guess.clone()
                 } else {
-                    let best_seen_option = best_seen.lock().unwrap();
-                    let from_candidate = best_seen_option
+                    let seen_option = seen.lock().unwrap();
+                    let from_candidate = seen_option
                         .as_ref()
-                        .map(|best| &best.candidate)
+                        .map(|seen_| &seen_.best_candidate)
                         .unwrap_or(&initial_guess)
                         .as_object()
                         .unwrap();
@@ -99,7 +100,7 @@ async fn parallel_hill_climbing(
             evaluate_candidate_and_report(
                 &obj_func_call_def,
                 candidate,
-                best_seen.clone(),
+                seen.clone(),
                 &processing_start_instant,
                 iteration_start_time,
                 event_sender.clone(),
@@ -108,17 +109,14 @@ async fn parallel_hill_climbing(
 
         future::join_all(eval_candidate_futures).await;
 
-        debug!(
-            "Iteration {} completed. Best seen: {:?}",
-            iter_num, best_seen
-        );
+        debug!("Iteration {} completed. Seen: {:?}", iter_num, seen);
     }
 }
 
 async fn evaluate_candidate_and_report(
     obj_func_call_def: &ObjFuncCallDef,
     new_candidate: serde_json::Value,
-    best_seen_context: BestSeenContext,
+    seen_context: SeenContext,
     processing_start_instant: &AppTime,
     iteration_start_time: f64,
     event_sender: EventSender,
@@ -129,27 +127,31 @@ async fn evaluate_candidate_and_report(
         .unwrap_or(Duration::ZERO)
         .as_secs_f64();
 
-    let mut best_seen_option = best_seen_context.lock().unwrap();
-    let obj_func_val_before = best_seen_option
-        .as_ref()
-        .map(|best_seen| best_seen.obj_func_val);
+    let mut seen_option = seen_context.lock().unwrap();
+    let obj_func_val_before = seen_option.as_ref().map(|seen| seen.best_obj_func_val);
+    let latest_completion_time_before = seen_option.as_ref().map(|seen| seen.latest_completion_time);
 
     match new_obj_func_val_option {
         Some(new_obj_func_val) => {
-            let replace = best_seen_option
+            let replace = seen_option
                 .as_ref()
-                .map(|best_seen| new_obj_func_val < best_seen.obj_func_val)
+                .map(|seen| new_obj_func_val < seen.best_obj_func_val)
                 .unwrap_or(true);
 
             if replace {
-                *best_seen_option = Some(BestSeen {
-                    candidate: new_candidate.clone(),
-                    obj_func_val: new_obj_func_val,
+                *seen_option = Some(Seen {
+                    best_candidate: new_candidate.clone(),
+                    best_obj_func_val: new_obj_func_val,
+                    latest_completion_time: completion_time,
                 });
             }
         }
         None => (),
     };
+
+   seen_option.as_mut().unwrap().latest_completion_time = completion_time;
+
+    let latest_interleaving_completion_time = latest_completion_time_before.filter(|completion_time_before| *completion_time_before > iteration_start_time);
 
     let report = CandidateEvalReport {
         start_time: iteration_start_time,
@@ -157,6 +159,7 @@ async fn evaluate_candidate_and_report(
         obj_func_val: new_obj_func_val_option,
         best_seen_obj_func_val_before: obj_func_val_before,
         candidate: new_candidate.clone(),
+        latest_interleaving_completion_time,
     };
 
     event_sender

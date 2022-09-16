@@ -48,4 +48,5 @@ pub struct CandidateEvalReport {
     pub obj_func_val: Option<f64>,
     pub best_seen_obj_func_val_before: Option<f64>,
     pub candidate: serde_json::Value,
+    pub latest_interleaving_completion_time: Option<f64>
 }
