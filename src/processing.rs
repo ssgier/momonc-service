@@ -15,7 +15,7 @@ use serde_json::Number as NumberValue;
 use serde_json::Value::{Bool, Number, Object};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use crate::algo::{
     AlgoConf::{self, *},
@@ -129,7 +129,8 @@ async fn evaluate_candidate_and_report(
 
     let mut seen_option = seen_context.lock().unwrap();
     let obj_func_val_before = seen_option.as_ref().map(|seen| seen.best_obj_func_val);
-    let latest_completion_time_before = seen_option.as_ref().map(|seen| seen.latest_completion_time);
+    let latest_completion_time_before =
+        seen_option.as_ref().map(|seen| seen.latest_completion_time);
 
     match new_obj_func_val_option {
         Some(new_obj_func_val) => {
@@ -149,12 +150,18 @@ async fn evaluate_candidate_and_report(
         None => (),
     };
 
-   seen_option.as_mut().unwrap().latest_completion_time = completion_time;
+    seen_option.as_mut().unwrap().latest_completion_time = completion_time;
 
-    let latest_interleaving_completion_time = latest_completion_time_before.filter(|completion_time_before| *completion_time_before > iteration_start_time);
+    let latest_interleaving_completion_time = latest_completion_time_before
+        .filter(|completion_time_before| *completion_time_before > iteration_start_time);
 
     let report = CandidateEvalReport {
         start_time: iteration_start_time,
+        start_unix_timestamp: processing_start_instant
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs_f64()
+            + iteration_start_time,
         completion_time,
         obj_func_val: new_obj_func_val_option,
         best_seen_obj_func_val_before: obj_func_val_before,

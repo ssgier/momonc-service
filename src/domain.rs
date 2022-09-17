@@ -37,13 +37,16 @@ pub struct ProcessingJobData {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ProcessingState {
     pub recent_candidate_eval_reports: Vec<CandidateEvalReport>,
+    pub best_seen_candidate_eval_reports: Vec<CandidateEvalReport>,
     pub time: f64,
-    pub window_size_hint: usize
+    pub window_length_hint: usize,
+    pub best_seen_table_size_hint: usize,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CandidateEvalReport {
     pub start_time: f64,
+    pub start_unix_timestamp: f64,
     pub completion_time: f64,
     pub obj_func_val: Option<f64>,
     pub best_seen_obj_func_val_before: Option<f64>,
